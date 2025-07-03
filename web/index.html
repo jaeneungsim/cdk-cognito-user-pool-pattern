@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cognito User Pool Pattern</title>
+    <script src="https://unpkg.com/amazon-cognito-identity-js@6.3.12/dist/amazon-cognito-identity.min.js"></script>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1691.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #007bff;
+        }
+        .form-group {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+        }
+        input, select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+            width: 200px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.success {
+            background-color: #28a745;
+        }
+        button.danger {
+            background-color: #dc3545;
+        }
+        button.warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .architecture {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-family: monospace;
+        }
+        .hidden {
+            display: none;
+        }
+        .user-info {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Cognito User Pool Pattern</h1>
+        
+        <div class="architecture">
+            <h3>Architecture Overview:</h3>
+            User Pool → Identity Pool → IAM Roles (buyer: PowerUser, seller: ReadOnly)
+        </div>
+        
+        <p>This demo showcases:</p>
+        <ul>
+            <li><strong>User Registration</strong>: Create new users with email verification</li>
+            <li><strong>User Authentication</strong>: Login with credentials</li>
+            <li><strong>Group-based Permissions</strong>: buyer vs seller roles with different AWS permissions</li>
+            <li><strong>Identity Pool Integration</strong>: Get AWS credentials based on user group</li>
+        </ul>
+    </div>
+
+    <!-- Configuration Section -->
+    <div class="container">
+        <h2>⚙️ Configuration</h2>
+        <div class="form-group">
+            <label>Region:</label>
+            <input type="text" id="region" value="ap-southeast-2" placeholder="AWS Region">
+        </div>
+        <div class="form-group">
+            <label>User Pool ID:</label>
+            <input type="text" id="userPoolId" placeholder="Copy from CloudFormation Outputs: CognitoStack.UserPoolId">
+        </div>
+        <div class="form-group">
+            <label>Client ID:</label>
+            <input type="text" id="clientId" placeholder="Copy from CloudFormation Outputs: CognitoStack.UserPoolClientId">
+        </div>
+        <div class="form-group">
+            <label>Identity Pool ID:</label>
+            <input type="text" id="identityPoolId" placeholder="Copy from CloudFormation Outputs: CognitoStack.IdentityPoolId">
+        </div>
+        <button onclick="initializeCognito()">Initialize Cognito</button>
+        <div id="configResult" class="result hidden"></div>
+    </div>
+
+    <!-- Registration Section -->
+    <div class="container" id="registrationSection">
+        <h2>📝 User Registration</h2>
+        <div class="section">
+            <div class="form-group">
+                <label>Email:</label>
+                <input type="email" id="regEmail" placeholder="user@example.com">
+            </div>
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" id="regPassword" placeholder="Min 8 chars, mixed case, numbers">
+            </div>
+            <div class="form-group">
+                <label>First Name:</label>
+                <input type="text" id="regFirstName" placeholder="John">
+            </div>
+            <div class="form-group">
+                <label>Last Name:</label>
+                <input type="text" id="regLastName" placeholder="Doe">
+            </div>
+            <div class="form-group">
+                <label>User Group:</label>
+                <select id="regGroup">
+                    <option value="buyer">Buyer (PowerUser Access)</option>
+                    <option value="seller">Seller (ReadOnly Access)</option>
+                </select>
+            </div>
+            <button onclick="registerUser()">Register User</button>
+        </div>
+        
+        <!-- Email Verification -->
+        <div class="section hidden" id="verificationSection">
+            <h3>📧 Email Verification</h3>
+            <div class="form-group">
+                <label>Verification Code:</label>
+                <input type="text" id="verificationCode" placeholder="6-digit code from email">
+            </div>
+            <button onclick="confirmRegistration()">Verify Email</button>
+        </div>
+        
+        <div id="registrationResult" class="result hidden"></div>
+    </div>
+
+    <!-- Login Section -->
+    <div class="container" id="loginSection">
+        <h2>🔓 User Login</h2>
+        <div class="section">
+            <div class="form-group">
+                <label>Email:</label>
+                <input type="email" id="loginEmail" placeholder="user@example.com">
+            </div>
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" id="loginPassword" placeholder="Password">
+            </div>
+            <button onclick="loginUser()">Login</button>
+            <button class="danger" onclick="logoutUser()">Logout</button>
+        </div>
+        <div id="loginResult" class="result hidden"></div>
+    </div>
+
+    <!-- User Info Section -->
+    <div class="container hidden" id="userInfoSection">
+        <h2>👤 User Information</h2>
+        <div id="userInfo" class="user-info"></div>
+        <button onclick="getAWSCredentials()">Get AWS Credentials</button>
+        <button onclick="testPermissions()">Test AWS Permissions</button>
+        <div id="userInfoResult" class="result hidden"></div>
+    </div>
+
+    <script>
+        let cognitoUser = null;
+        let userPool = null;
+        let cognitoIdentity = null;
+        let currentSession = null;
+
+        // Configuration injected at build time
+        window.COGNITO_CONFIG = window.COGNITO_CONFIG || {
+            region: 'REPLACE_WITH_REGION',
+            userPoolId: 'REPLACE_WITH_USER_POOL_ID',
+            clientId: 'REPLACE_WITH_CLIENT_ID',
+            identityPoolId: 'REPLACE_WITH_IDENTITY_POOL_ID'
+        };
+
+        function initializeCognito() {
+            const region = document.getElementById('region').value;
+            const userPoolId = document.getElementById('userPoolId').value;
+            const clientId = document.getElementById('clientId').value;
+            const identityPoolId = document.getElementById('identityPoolId').value;
+
+            if (!userPoolId || !clientId || !identityPoolId) {
+                showResult('configResult', 'Please fill in all configuration fields', 'error');
+                return;
+            }
+
+            try {
+                // Check if libraries are loaded
+                if (typeof AmazonCognitoIdentity === 'undefined') {
+                    throw new Error('AmazonCognitoIdentity library not loaded');
+                }
+                if (typeof AWS === 'undefined') {
+                    throw new Error('AWS SDK not loaded');
+                }
+
+                // Configure AWS SDK
+                AWS.config.region = region;
+
+                // Initialize Cognito User Pool
+                const poolData = {
+                    UserPoolId: userPoolId,
+                    ClientId: clientId
+                };
+                userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
+
+                // Initialize Cognito Identity
+                cognitoIdentity = new AWS.CognitoIdentity({region: region});
+
+                showResult('configResult', 'Cognito initialized successfully!', 'success');
+            } catch (error) {
+                showResult('configResult', `Error initializing Cognito: ${error.message}`, 'error');
+            }
+        }
+
+        function registerUser() {
+            if (!userPool) {
+                showResult('registrationResult', 'Please initialize Cognito first', 'error');
+                return;
+            }
+
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+            const firstName = document.getElementById('regFirstName').value;
+            const lastName = document.getElementById('regLastName').value;
+            const group = document.getElementById('regGroup').value;
+
+            if (!email || !password || !firstName || !lastName) {
+                showResult('registrationResult', 'Please fill in all fields', 'error');
+                return;
+            }
+
+            const attributeList = [
+                new AmazonCognitoIdentity.CognitoUserAttribute({Name: 'email', Value: email}),
+                new AmazonCognitoIdentity.CognitoUserAttribute({Name: 'given_name', Value: firstName}),
+                new AmazonCognitoIdentity.CognitoUserAttribute({Name: 'family_name', Value: lastName})
+            ];
+
+            userPool.signUp(email, password, attributeList, null, function(err, result) {
+                if (err) {
+                    showResult('registrationResult', `Registration failed: ${err.message}`, 'error');
+                    return;
+                }
+                
+                cognitoUser = result.user;
+                showResult('registrationResult', 
+                    `Registration successful!\nUser: ${cognitoUser.getUsername()}\nPlease check your email for verification code.`, 
+                    'success');
+                
+                document.getElementById('verificationSection').classList.remove('hidden');
+            });
+        }
+
+        function confirmRegistration() {
+            if (!cognitoUser) {
+                showResult('registrationResult', 'Please register first', 'error');
+                return;
+            }
+
+            const verificationCode = document.getElementById('verificationCode').value;
+            if (!verificationCode) {
+                showResult('registrationResult', 'Please enter verification code', 'error');
+                return;
+            }
+
+            cognitoUser.confirmRegistration(verificationCode, true, function(err, result) {
+                if (err) {
+                    showResult('registrationResult', `Verification failed: ${err.message}`, 'error');
+                    return;
+                }
+                
+                showResult('registrationResult', 'Email verified successfully! You can now login.', 'success');
+                document.getElementById('verificationSection').classList.add('hidden');
+                
+                // Auto-fill login form
+                document.getElementById('loginEmail').value = document.getElementById('regEmail').value;
+            });
+        }
+
+        function loginUser() {
+            if (!userPool) {
+                showResult('loginResult', 'Please initialize Cognito first', 'error');
+                return;
+            }
+
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            if (!email || !password) {
+                showResult('loginResult', 'Please enter email and password', 'error');
+                return;
+            }
+
+            const authenticationData = {
+                Username: email,
+                Password: password,
+            };
+
+            const authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
+            const userData = {
+                Username: email,
+                Pool: userPool
+            };
+
+            cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+
+            cognitoUser.authenticateUser(authenticationDetails, {
+                onSuccess: function (result) {
+                    currentSession = result;
+                    const accessToken = result.getAccessToken().getJwtToken();
+                    const idToken = result.getIdToken().getJwtToken();
+                    
+                    showResult('loginResult', 
+                        `Login successful!\nAccess Token: ${accessToken.substring(0, 50)}...\nID Token: ${idToken.substring(0, 50)}...`, 
+                        'success');
+                    
+                    showUserInfo(result);
+                },
+
+                onFailure: function(err) {
+                    showResult('loginResult', `Login failed: ${err.message}`, 'error');
+                },
+            });
+        }
+
+        function logoutUser() {
+            if (cognitoUser) {
+                cognitoUser.signOut();
+                currentSession = null;
+                showResult('loginResult', 'Logged out successfully', 'success');
+                document.getElementById('userInfoSection').classList.add('hidden');
+            }
+        }
+
+        function showUserInfo(session) {
+            const idToken = session.getIdToken();
+            const payload = idToken.payload;
+            
+            let userInfoHtml = `
+                <strong>User Information:</strong><br>
+                Email: ${payload.email}<br>
+                Name: ${payload.given_name} ${payload.family_name}<br>
+                Email Verified: ${payload.email_verified}<br>
+                User ID: ${payload.sub}<br>
+            `;
+
+            // Check for groups
+            if (payload['cognito:groups']) {
+                userInfoHtml += `Groups: ${payload['cognito:groups'].join(', ')}<br>`;
+            }
+
+            document.getElementById('userInfo').innerHTML = userInfoHtml;
+            document.getElementById('userInfoSection').classList.remove('hidden');
+        }
+
+        function getAWSCredentials() {
+            if (!currentSession || !cognitoIdentity) {
+                showResult('userInfoResult', 'Please login first and initialize Cognito', 'error');
+                return;
+            }
+
+            const identityPoolId = document.getElementById('identityPoolId').value;
+            const userPoolId = document.getElementById('userPoolId').value;
+            const idToken = currentSession.getIdToken().getJwtToken();
+
+            const params = {
+                IdentityPoolId: identityPoolId,
+                Logins: {}
+            };
+            params.Logins[`cognito-idp.${AWS.config.region}.amazonaws.com/${userPoolId}`] = idToken;
+
+            cognitoIdentity.getId(params, function(err, data) {
+                if (err) {
+                    showResult('userInfoResult', `Error getting identity: ${err.message}`, 'error');
+                    return;
+                }
+
+                const credParams = {
+                    IdentityId: data.IdentityId,
+                    Logins: params.Logins
+                };
+
+                cognitoIdentity.getCredentialsForIdentity(credParams, function(err, credentials) {
+                    if (err) {
+                        showResult('userInfoResult', `Error getting credentials: ${err.message}`, 'error');
+                        return;
+                    }
+
+                    showResult('userInfoResult', 
+                        `AWS Credentials obtained:\n` +
+                        `Identity ID: ${data.IdentityId}\n` +
+                        `Access Key: ${credentials.Credentials.AccessKeyId}\n` +
+                        `Secret Key: ${credentials.Credentials.SecretKey.substring(0, 20)}...\n` +
+                        `Session Token: ${credentials.Credentials.SessionToken.substring(0, 50)}...`, 
+                        'success');
+                });
+            });
+        }
+
+        function testPermissions() {
+            showResult('userInfoResult', 
+                'To test permissions, use the AWS credentials with AWS CLI or SDK.\n' +
+                'Buyer users should have PowerUser access (can create/modify most resources)\n' +
+                'Seller users should have ReadOnly access (can only view resources)', 
+                'info');
+        }
+
+        function showResult(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = message;
+            element.className = `result ${type}`;
+            element.classList.remove('hidden');
+        }
+
+        // Auto-fill configuration if deployed
+        window.onload = function() {
+            // These will be replaced during deployment
+            if (window.COGNITO_CONFIG.userPoolId !== 'REPLACE_WITH_USER_POOL_ID') {
+                document.getElementById('region').value = window.COGNITO_CONFIG.region;
+                document.getElementById('userPoolId').value = window.COGNITO_CONFIG.userPoolId;
+                document.getElementById('clientId').value = window.COGNITO_CONFIG.clientId;
+                document.getElementById('identityPoolId').value = window.COGNITO_CONFIG.identityPoolId;
+            }
+        };
+    </script>
+</body>
+</html>
