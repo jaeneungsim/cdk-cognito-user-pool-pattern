@@ -366,7 +366,7 @@
                     const idToken = result.getIdToken().getJwtToken();
                     
                     showResult('loginResult', 
-                        `Login successful!\nAccess Token: ${accessToken.substring(0, 50)}...\nID Token: ${idToken.substring(0, 50)}...`, 
+                        `Login successful!\nAccess Token: ${accessToken}\nID Token: ${idToken}`, 
                         'success');
                     
                     showUserInfo(result);
@@ -445,8 +445,9 @@
                         `AWS Credentials obtained:\n` +
                         `Identity ID: ${data.IdentityId}\n` +
                         `Access Key: ${credentials.Credentials.AccessKeyId}\n` +
-                        `Secret Key: ${credentials.Credentials.SecretKey.substring(0, 20)}...\n` +
-                        `Session Token: ${credentials.Credentials.SessionToken.substring(0, 50)}...`, 
+                        `Secret Key: ${credentials.Credentials.SecretKey}\n` +
+                        `Session Token: ${credentials.Credentials.SessionToken}\n` +
+                        `Expiration: ${credentials.Credentials.Expiration}`, 
                         'success');
                 });
             });

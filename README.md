@@ -1,219 +1,210 @@
-# EventBridge Lambda Pattern with CDK
+# AWS Cognito User Pool Pattern with CDK
 
-A production-ready serverless architecture demonstrating EventBridge-driven Lambda processing with conditional logic. This pattern shows how to implement asynchronous event processing triggered by business rules.
+A production-ready AWS CDK pattern demonstrating how to implement user authentication with group-based permissions using Amazon Cognito User Pools and Identity Pools.
+
+## Purpose
+
+This project showcases a standard, secure authentication architecture that demonstrates:
+- User registration and authentication flow
+- Group-based permission management (buyer/seller roles)
+- AWS credentials federation through Identity Pools
+- Clean separation between authentication and authorization
 
 ## Architecture
 
 ```
-Browser → CloudFront → API Gateway → Lambda1 → EventBridge → SQS → Lambda2
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   User Pool     │────│  Identity Pool   │────│  AWS Resources  │
+│                 │    │                  │    │                 │
+│ ┌─────────────┐ │    │ ┌──────────────┐ │    │ • S3 Buckets    │
+│ │ buyer group │ │────│ │ Conditional  │ │────│ • DynamoDB      │
+│ └─────────────┘ │    │ │ IAM Policies │ │    │ • Lambda        │
+│ ┌─────────────┐ │    │ └──────────────┘ │    │ • etc...        │
+│ │seller group │ │    │                  │    │                 │
+│ └─────────────┘ │    └──────────────────┘    └─────────────────┘
+└─────────────────┘
+
+        │                        │                        │
+        ▼                        ▼                        ▼
+   Authentication           Authorization            Resource Access
+   (Who you are)         (What you can do)        (AWS API Calls)
 ```
 
-**Request Flow:**
-1. **API Gateway** receives GET requests with score parameter
-2. **Lambda1** validates score and responds immediately to user
-3. **EventBridge** receives events for scores < 50 or missing scores
-4. **SQS** queues EventBridge events for reliable processing
-5. **Lambda2** processes low-score events asynchronously
+### Components
+
+- **Cognito User Pool**: Handles user registration, authentication, and group membership
+- **Cognito Identity Pool**: Provides temporary AWS credentials based on user groups
+- **IAM Conditional Policies**: Grant different permissions based on group membership
+- **CloudFront + S3**: Hosts the demo web application
+
+### Permission Model
+
+| Group  | AWS Permissions | Use Case |
+|--------|----------------|----------|
+| buyer  | PowerUser (Full access except IAM) | E-commerce buyers, power users |
+| seller | ReadOnly (View-only access) | Content creators, limited users |
 
 ## When to Use This Pattern
 
 ### Ideal For:
-- **Business rule validation** with downstream processing
-- **Audit trails** for failed validations
-- **Async notifications** based on conditions
-- **Event-driven microservices** with decoupled components
-- **High-throughput APIs** requiring fast response times
+- **B2B SaaS applications** with role-based access
+- **E-commerce platforms** with buyer/seller distinctions
+- **Multi-tenant applications** requiring user segmentation
+- **Enterprise applications** needing fine-grained permissions
+- **Learning AWS authentication** best practices
 
-### Use Cases:
-- Credit score checks with follow-up actions
-- Order validation with inventory updates
-- User registration with verification workflows
-- Content moderation with review queues
+### Not Suitable For:
+- Simple single-role applications
+- Applications not requiring AWS resource access
+- High-frequency permission changes
+- Complex hierarchical role structures
 
-## Key Features
+## Prerequisites
 
-### **Production-Ready Components**
-- **Multi-region deployment** (WAF: us-east-1, Backend: ap-southeast-2)
-- **CloudFront CDN** with automatic cache invalidation
-- **Dead Letter Queues** for error handling
-- **EventBridge custom bus** for event isolation
-- **Batch processing** with individual failure handling
+- AWS CLI configured with appropriate permissions
+- Node.js 18+ and npm
+- AWS CDK CLI (`npm install -g aws-cdk`)
+- An AWS account with Cognito and IAM permissions
 
-### **Performance Optimizations**
-- **Asynchronous EventBridge calls** for faster response times
-- **CloudFront caching** with query parameter forwarding
-- **Lambda proxy integration** for efficient API Gateway setup
-- **SQS batching** for optimal throughput
+## Installation
 
-## Quick Start
+1. **Clone and setup**
+   ```bash
+   git clone <repository-url>
+   cd cdk-cognito-user-pool-pattern
+   npm install
+   ```
 
-### Prerequisites
-- Node.js 20+
-- AWS CLI configured
-- CDK CLI: `npm install -g aws-cdk`
+2. **Configure AWS Profile**
+   ```bash
+   export AWS_PROFILE=your-profile-name
+   ```
 
-### Installation
+3. **Bootstrap CDK (if first time)**
+   ```bash
+   cdk bootstrap
+   ```
+
+4. **Deploy the infrastructure**
+   ```bash
+   cdk deploy --all
+   ```
+
+5. **Note the outputs**
+   ```bash
+   # Save these values from the deployment output:
+   # - CognitoStack.UserPoolId
+   # - CognitoStack.UserPoolClientId  
+   # - CognitoStack.IdentityPoolId
+   # - FrontendStack.WebsiteURL
+   ```
+
+## Usage
+
+### 1. Access the Demo Application
+
+Visit the deployed website URL from the CloudFormation outputs:
+```
+https://your-cloudfront-domain.cloudfront.net
+```
+
+### 2. Configure Cognito Settings
+
+On the web interface:
+1. Enter the Region: `ap-southeast-2`
+2. Paste the User Pool ID from deployment outputs
+3. Paste the Client ID from deployment outputs
+4. Paste the Identity Pool ID from deployment outputs
+5. Click "Initialize Cognito"
+
+### 3. Test User Registration
+
+1. Fill in the registration form
+2. Select either "Buyer" or "Seller" group
+3. Click "Register User"
+4. Check your email for verification code
+5. Enter the code and verify
+
+### 4. Test Authentication
+
+1. Login with your credentials
+2. Click "Get AWS Credentials" to see temporary AWS credentials
+3. Notice different permissions based on your group
+
+### 5. Test Permissions (Optional)
+
+Use the temporary AWS credentials with AWS CLI:
 
 ```bash
-# Clone and install dependencies
-git clone <repository-url>
-cd cdk-eventbridge-lambda-pattern
-npm install
+# Configure temporary credentials
+export AWS_ACCESS_KEY_ID=<access-key-from-web-interface>
+export AWS_SECRET_ACCESS_KEY=<secret-key-from-web-interface>
+export AWS_SESSION_TOKEN=<session-token-from-web-interface>
 
-# Bootstrap CDK (first time only)
-cdk bootstrap
-
-# Deploy all stacks
-cdk deploy --all
+# Test permissions
+aws s3 ls  # Should work for both groups
+aws ec2 create-instance  # Should work for buyer, fail for seller
 ```
 
-### Configuration
+## Project Structure
 
-Set your AWS profile if needed:
+```
+├── bin/
+│   └── cdk-cognito-user-pool-pattern.ts    # CDK app entry point
+├── lib/
+│   └── cdk-cognito-user-pool-pattern-stack.ts  # Main stack definitions
+├── web/
+│   └── index.html                           # Demo web application
+├── package.json                             # Dependencies
+└── README.md                                # This file
+```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AWS_PROFILE` | AWS profile to use | (required) |
+| `AWS_REGION` | AWS region for deployment | `ap-southeast-2` |
+
+### Customization
+
+To modify user groups or permissions:
+
+1. **Add new groups**: Edit `lib/cdk-cognito-user-pool-pattern-stack.ts`
+2. **Change permissions**: Modify the IAM policy statements
+3. **Update regions**: Change the region in `bin/` file
+
+## Security Considerations
+
+- **Deletion Protection**: Set to `false` for demo, enable in production
+- **Token Expiration**: Configured with reasonable defaults (60min access, 30 days refresh)
+- **No Client Secrets**: Uses public client for web applications
+- **Conditional Policies**: Permissions granted only when user is in specific group
+- **HTTPS Only**: All traffic encrypted in transit
+
+## Cleanup
+
+To avoid ongoing charges:
+
 ```bash
-export AWS_PROFILE=your-profile-name
-```
-
-## Testing
-
-### Web Interface
-1. Open the CloudFront URL from deployment output
-2. Test different score scenarios:
-   - **High Score (≥50)**: Direct Lambda1 response
-   - **Low Score (<50)**: Triggers EventBridge → SQS → Lambda2
-   - **Missing Score**: Same as low score flow
-
-### API Testing
-```bash
-# High score - immediate response
-curl "https://your-cloudfront-url/api/score?score=75"
-
-# Low score - triggers event processing
-curl "https://your-cloudfront-url/api/score?score=25"
-
-# Missing score - triggers event processing
-curl "https://your-cloudfront-url/api/score"
-```
-
-### Expected Responses
-
-**High Score (≥50):**
-```json
-{
-  "message": "Score validation passed",
-  "score": 75,
-  "status": "success",
-  "timestamp": "2025-07-02T12:00:00.000Z"
-}
-```
-
-**Low Score (<50):**
-```json
-{
-  "message": "Score validation failed - event sent to processing pipeline",
-  "score": "25",
-  "action": "EventBridge notification sent",
-  "timestamp": "2025-07-02T12:00:00.000Z"
-}
-```
-
-## Production Considerations
-
-### **CloudFront Configuration**
-- **Automatic Invalidation**: Web assets automatically invalidated on deployment
-- **Query Parameter Forwarding**: Properly configured for API routes
-- **CORS Support**: Enabled for cross-origin requests
-
-### **EventBridge Best Practices**
-- **Asynchronous Calls**: EventBridge calls don't block user responses
-- **Custom Event Bus**: Isolated from default bus for better organization
-- **Structured Events**: Consistent event format for downstream processing
-
-### **Error Handling**
-- **Dead Letter Queues**: Failed messages after 3 retries
-- **Batch Item Failures**: Individual message retry capability
-- **EventBridge Fallback**: Continues even if EventBridge fails
-
-### **Monitoring**
-Monitor these CloudWatch metrics:
-- **Lambda Duration**: Response time optimization
-- **EventBridge Invocations**: Event processing volume
-- **SQS Queue Depth**: Processing lag indicators
-- **DLQ Message Count**: Error rate monitoring
-
-## Architecture Decisions
-
-### Fire-and-Forget vs Awaited EventBridge
-
-**Current Implementation (Fire-and-Forget):**
-```javascript
-// Non-blocking EventBridge call - don't wait for response
-eventBridge.send(command).catch(error => {
-    console.error('EventBridge failed:', error);
-    // User response not affected
-});
-return response; // Immediate response
-```
-
-**Alternative (Awaited):**
-```javascript
-// Wait for EventBridge response before continuing
-await eventBridge.send(command);
-return response; // Delayed response
-```
-
-**Trade-offs:**
-- **Fire-and-Forget**: Faster response (50-100ms) but no delivery guarantee to user
-- **Awaited**: Slower response (200-500ms) but guaranteed event delivery
-
-### **Direct Lambda vs SQS Integration**
-
-**Current**: API Gateway → Lambda1 (Direct)  
-**Alternative**: API Gateway → SQS → Lambda1 (Indirect)
-
-**Benefits of Direct Integration:**
-- Immediate score validation
-- Real-time user feedback
-- Simpler error handling
-
-## Development
-
-### Project Structure
-```
-├── bin/cdk-eventbridge-lambda-pattern.ts    # CDK app entry
-├── lib/cdk-eventbridge-lambda-pattern-stack.ts # Infrastructure
-├── lambda/
-│   ├── sample-lambda-1/index.js            # Score validator
-│   └── sample-lambda-2/index.js            # Event processor
-├── web/index.html                          # Test interface
-└── test/                                   # Unit tests
-```
-
-### Local Development
-```bash
-# Watch for changes
-npm run watch
-
-# Run tests
-npm test
-
-# Check differences before deploy
-cdk diff
-
-# Deploy specific stack
-cdk deploy BackendStack
-```
-
-### Cleanup
-```bash
-# Remove all resources
 cdk destroy --all
 ```
 
+This will remove all AWS resources created by this pattern.
+
+## Learn More
+
+- [AWS Cognito Documentation](https://docs.aws.amazon.com/cognito/)
+- [AWS CDK Documentation](https://docs.aws.amazon.com/cdk/)
+- [CDK Cognito Examples](https://github.com/aws/aws-cdk/tree/main/packages/aws-cdk-lib/aws-cognito)
+- [Identity Pool Role Mapping](https://docs.aws.amazon.com/cognito/latest/developerguide/role-based-access-control.html)
+
 ## License
 
-MIT License
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ---
 
-Built with AWS CDK and modern serverless patterns.
+**Note**: This is a demonstration pattern. For production use, review security settings, enable deletion protection, and customize permissions according to your specific requirements.
