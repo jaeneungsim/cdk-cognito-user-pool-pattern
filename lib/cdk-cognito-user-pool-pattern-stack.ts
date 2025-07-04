@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { IdentityPool, UserPoolAuthenticationProvider, IdentityPoolProviderUrl } from 'aws-cdk-lib/aws-cognito-identitypool';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
@@ -18,6 +19,13 @@ export class CognitoStack extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+
+    // Create Lambda function for automatic group assignment
+    const autoGroupAssignmentLambda = new lambda.Function(this, 'AutoGroupAssignmentLambda', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'auto-group-assignment.handler',
+      code: lambda.Code.fromAsset('lambda'),
+    });
 
     // Create User Pool with best practices
     this.userPool = new cognito.UserPool(this, 'UserPool', {
@@ -50,12 +58,20 @@ export class CognitoStack extends cdk.Stack {
           mutable: true,
         },
       },
+      customAttributes: {
+        user_type: new cognito.StringAttribute({
+          mutable: true,
+        }),
+      },
       passwordPolicy: {
         minLength: 8,
         requireLowercase: true,
         requireUppercase: true,
         requireDigits: true,
         requireSymbols: false,
+      },
+      lambdaTriggers: {
+        postConfirmation: autoGroupAssignmentLambda,
       },
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       deletionProtection: false, // Set to true in production
@@ -75,7 +91,7 @@ export class CognitoStack extends cdk.Stack {
       enableTokenRevocation: true,
     });
 
-    // Create Identity Pool first without role mappings
+    // Create Identity Pool first
     this.identityPool = new IdentityPool(this, 'IdentityPool', {
       identityPoolName: 'cognito-identity-pool-pattern',
       allowUnauthenticatedIdentities: false,
@@ -92,19 +108,37 @@ export class CognitoStack extends cdk.Stack {
     // Create User Pool Groups without IAM roles to avoid circular dependency
     this.buyerGroup = this.userPool.addGroup('BuyerGroup', {
       groupName: 'buyer',
-      description: 'Buyer group with PowerUser permissions',
+      description: 'Buyer group',
     });
 
     this.sellerGroup = this.userPool.addGroup('SellerGroup', {
       groupName: 'seller',
-      description: 'Seller group with ReadOnly permissions',
+      description: 'Seller group',
     });
 
-    // Add group-based conditional policies to the default authenticated role
+    // Base S3 permissions for all authenticated users (read operations)
     this.identityPool.authenticatedRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['*'],
+        actions: [
+          's3:GetObject',
+          's3:ListAllMyBuckets',
+          's3:ListBucket'
+        ],
+        resources: ['*'],
+      })
+    );
+
+    // Conditional S3 permissions for buyer group (write operations)
+    this.identityPool.authenticatedRole.addToPrincipalPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          's3:CreateBucket',
+          's3:DeleteBucket',
+          's3:DeleteObject',
+          's3:PutObject'
+        ],
         resources: ['*'],
         conditions: {
           'ForAnyValue:StringEquals': {
@@ -114,32 +148,15 @@ export class CognitoStack extends cdk.Stack {
       })
     );
 
-    this.identityPool.authenticatedRole.addToPrincipalPolicy(
+    // Grant Lambda permissions to add users to groups (using wildcard to avoid circular dependency)
+    autoGroupAssignmentLambda.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: [
-          'ec2:Describe*',
-          's3:Get*',
-          's3:List*',
-          'iam:Get*',
-          'iam:List*',
-          'cloudformation:Describe*',
-          'cloudformation:List*',
-          'logs:Describe*',
-          'logs:Get*',
-          'logs:List*',
-          'dynamodb:GetItem',
-          'dynamodb:Query',
-          'dynamodb:Scan',
-        ],
+        actions: ['cognito-idp:AdminAddUserToGroup'],
         resources: ['*'],
-        conditions: {
-          'ForAnyValue:StringEquals': {
-            'cognito-identity.amazonaws.com:groups': ['seller']
-          }
-        }
       })
     );
+
 
     // CloudFormation Outputs
     new cdk.CfnOutput(this, 'UserPoolId', {
@@ -218,13 +235,5 @@ export class FrontendStack extends cdk.Stack {
       value: `https://${this.distribution.distributionDomainName}`,
       description: 'Website URL',
     });
-  }
-}
-
-// Main Stack - deprecated, kept for compatibility
-export class CdkCognitoUserPoolPatternStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
-    super(scope, id, props);
-    // This stack is now empty - resources moved to separate stacks
   }
 }

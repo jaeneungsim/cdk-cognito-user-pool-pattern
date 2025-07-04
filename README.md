@@ -6,7 +6,7 @@ A production-ready AWS CDK pattern demonstrating how to implement user authentic
 
 This project showcases a standard, secure authentication architecture that demonstrates:
 - User registration and authentication flow
-- Group-based permission management (buyer/seller roles)
+- Automatic group assignment (buyer/seller roles)
 - AWS credentials federation through Identity Pools
 - Clean separation between authentication and authorization
 
@@ -33,16 +33,18 @@ This project showcases a standard, secure authentication architecture that demon
 ### Components
 
 - **Cognito User Pool**: Handles user registration, authentication, and group membership
-- **Cognito Identity Pool**: Provides temporary AWS credentials based on user groups
-- **IAM Conditional Policies**: Grant different permissions based on group membership
+- **Cognito Identity Pool**: Provides temporary AWS credentials with group context
+- **IAM Conditional Policies**: Grant different S3 permissions based on group membership
 - **CloudFront + S3**: Hosts the demo web application
 
 ### Permission Model
 
 | Group  | AWS Permissions | Use Case |
 |--------|----------------|----------|
-| buyer  | PowerUser (Full access except IAM) | E-commerce buyers, power users |
-| seller | ReadOnly (View-only access) | Content creators, limited users |
+| buyer  | S3 read + write access (create/delete buckets and objects) | E-commerce buyers, power users |
+| seller | S3 read-only access (get objects, list buckets) | Content creators, limited users |
+
+**Note**: Users are automatically assigned to buyer or seller groups based on their selection during registration. Group-based permissions are enforced through IAM conditional policies.
 
 ## When to Use This Pattern
 
@@ -111,7 +113,7 @@ https://your-cloudfront-domain.cloudfront.net
 ### 2. Configure Cognito Settings
 
 On the web interface:
-1. Enter the Region: `ap-southeast-2`
+1. Enter the Region: `your-deployed-region` (e.g., ap-southeast-2, us-east-1)
 2. Paste the User Pool ID from deployment outputs
 3. Paste the Client ID from deployment outputs
 4. Paste the Identity Pool ID from deployment outputs
@@ -129,22 +131,7 @@ On the web interface:
 
 1. Login with your credentials
 2. Click "Get AWS Credentials" to see temporary AWS credentials
-3. Notice different permissions based on your group
-
-### 5. Test Permissions (Optional)
-
-Use the temporary AWS credentials with AWS CLI:
-
-```bash
-# Configure temporary credentials
-export AWS_ACCESS_KEY_ID=<access-key-from-web-interface>
-export AWS_SECRET_ACCESS_KEY=<secret-key-from-web-interface>
-export AWS_SESSION_TOKEN=<session-token-from-web-interface>
-
-# Test permissions
-aws s3 ls  # Should work for both groups
-aws ec2 create-instance  # Should work for buyer, fail for seller
-```
+3. Users will be automatically assigned to either buyer or seller groups
 
 ## Project Structure
 
@@ -166,7 +153,7 @@ aws ec2 create-instance  # Should work for buyer, fail for seller
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `AWS_PROFILE` | AWS profile to use | (required) |
-| `AWS_REGION` | AWS region for deployment | `ap-southeast-2` |
+| `AWS_REGION` | AWS region for deployment | `your-preferred-region` |
 
 ### Customization
 

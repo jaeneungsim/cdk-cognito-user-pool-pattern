@@ -75,6 +75,10 @@
             white-space: pre-wrap;
             font-family: monospace;
             font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            overflow-x: auto;
+            word-break: break-all;
         }
         .architecture {
             background-color: #e9ecef;
@@ -211,7 +215,6 @@
         <h2>👤 User Information</h2>
         <div id="userInfo" class="user-info"></div>
         <button onclick="getAWSCredentials()">Get AWS Credentials</button>
-        <button onclick="testPermissions()">Test AWS Permissions</button>
         <div id="userInfoResult" class="result hidden"></div>
     </div>
 
@@ -288,7 +291,8 @@
             const attributeList = [
                 new AmazonCognitoIdentity.CognitoUserAttribute({Name: 'email', Value: email}),
                 new AmazonCognitoIdentity.CognitoUserAttribute({Name: 'given_name', Value: firstName}),
-                new AmazonCognitoIdentity.CognitoUserAttribute({Name: 'family_name', Value: lastName})
+                new AmazonCognitoIdentity.CognitoUserAttribute({Name: 'family_name', Value: lastName}),
+                new AmazonCognitoIdentity.CognitoUserAttribute({Name: 'custom:user_type', Value: group})
             ];
 
             userPool.signUp(email, password, attributeList, null, function(err, result) {
@@ -453,13 +457,6 @@
             });
         }
 
-        function testPermissions() {
-            showResult('userInfoResult', 
-                'To test permissions, use the AWS credentials with AWS CLI or SDK.\n' +
-                'Buyer users should have PowerUser access (can create/modify most resources)\n' +
-                'Seller users should have ReadOnly access (can only view resources)', 
-                'info');
-        }
 
         function showResult(elementId, message, type) {
             const element = document.getElementById(elementId);
