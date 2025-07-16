@@ -1,14 +1,16 @@
 # AWS Cognito User Pool Pattern with CDK
 
-A production-ready AWS CDK pattern demonstrating how to implement user authentication with group-based permissions using Amazon Cognito User Pools and Identity Pools.
+A demonstration project showing how to implement common user authentication and group-based permission patterns encountered in real-world development using AWS CDK.
 
 ## Purpose
 
-This project showcases a standard, secure authentication architecture that demonstrates:
+This project demonstrates how to solve common authentication challenges I've encountered in production environments, showing a simplified implementation approach for:
 - User registration and authentication flow
 - Automatic group assignment (buyer/seller roles)
 - AWS credentials federation through Identity Pools
 - Clean separation between authentication and authorization
+
+**Note**: This is a learning-focused implementation designed to illustrate core concepts. For production use, additional security hardening, proper stack separation, and environment-specific configurations are essential.
 
 ## Architecture
 
@@ -165,11 +167,15 @@ To modify user groups or permissions:
 
 ## Security Considerations
 
-- **Deletion Protection**: Set to `false` for demo, enable in production
-- **Token Expiration**: Configured with reasonable defaults (60min access, 30 days refresh)
-- **No Client Secrets**: Uses public client for web applications
-- **Conditional Policies**: Permissions granted only when user is in specific group
-- **HTTPS Only**: All traffic encrypted in transit
+⚠️ **Critical for Production**: This demo uses simplified configurations. For production environments, ensure proper security settings:
+
+- **Deletion Protection**: Currently `false` for easy cleanup → Enable in production
+- **Token Expiration**: Uses default values → Adjust based on security requirements
+- **Client Secrets**: Public client for web apps → Consider secrets for server-side applications
+- **Conditional Policies**: Basic group-based permissions → Implement principle of least privilege
+- **HTTPS Only**: All traffic encrypted in transit → Manage SSL/TLS certificates properly
+- **Stack Separation**: Single stack for simplicity → Separate Cognito, IAM, and application stacks in production
+- **Environment Configuration**: Hardcoded values → Use parameter stores and environment-specific configs
 
 ## Cleanup
 
@@ -194,4 +200,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Note**: This is a demonstration pattern. For production use, review security settings, enable deletion protection, and customize permissions according to your specific requirements.
+**Important**: This is a demonstration pattern for learning purposes. The implementation prioritizes clarity and simplicity over production-ready features. For production deployment, implement proper security controls, stack separation, and environment-specific configurations as outlined in the Security Considerations section.
